@@ -56,6 +56,7 @@ builder.Services.AddScoped<ICestaUseCase, CestaUseCase>();
 builder.Services.AddScoped<IContaMasterUseCase, ContaMasterUseCase>();
 builder.Services.AddScoped<IMotorCompraProgramadaUseCase, MotorCompraProgramadaUseCase>();
 builder.Services.AddScoped<IRebalanceamentoUseCase, RebalanceamentoUseCase>();
+builder.Services.AddScoped<IRebalanceamentoPorMudancaCestaUseCase, RebalanceamentoPorMudancaCestaUseCase>();
 
 var app = builder.Build();
 

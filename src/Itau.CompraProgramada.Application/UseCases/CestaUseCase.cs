@@ -7,11 +7,16 @@ namespace Itau.CompraProgramada.Application.UseCases;
 public class CestaUseCase : ICestaUseCase
 {
     private readonly ICestaRecomendacaoRepository _cestaRepository;
+    private readonly IRebalanceamentoPorMudancaCestaUseCase _rebalanceamentoUseCase;
     private readonly IUnitOfWork _unitOfWork;
 
-    public CestaUseCase(ICestaRecomendacaoRepository cestaRepository, IUnitOfWork unitOfWork)
+    public CestaUseCase(
+        ICestaRecomendacaoRepository cestaRepository,
+        IRebalanceamentoPorMudancaCestaUseCase rebalanceamentoUseCase,
+        IUnitOfWork unitOfWork)
     {
         _cestaRepository = cestaRepository;
+        _rebalanceamentoUseCase = rebalanceamentoUseCase;
         _unitOfWork = unitOfWork;
     }
 
@@ -32,9 +37,7 @@ public class CestaUseCase : ICestaUseCase
             cestaAtual.Desativar();
             _cestaRepository.Atualizar(cestaAtual);
 
-            // TODO: Iniciar processo de rebalanceamento assíncrono (Fase 7)
-            // Aqui futuramente será publicado um evento no Kafka para que os rebalanceamentos
-            // aconteçam de forma desvinculada dessa transação (evitando travamentos).
+            await _rebalanceamentoUseCase.ExecutarRebalanceamentoAsync(cestaAtual, novaCesta);
         }
 
         await _cestaRepository.AdicionarAsync(novaCesta);

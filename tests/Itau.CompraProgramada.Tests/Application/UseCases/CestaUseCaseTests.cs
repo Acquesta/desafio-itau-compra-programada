@@ -10,14 +10,16 @@ namespace Itau.CompraProgramada.Tests.Application.UseCases;
 public class CestaUseCaseTests
 {
     private readonly ICestaRecomendacaoRepository _cestaRepositoryMock;
+    private readonly IRebalanceamentoPorMudancaCestaUseCase _rebalanceamentoUseCaseMock;
     private readonly IUnitOfWork _unitOfWorkMock;
     private readonly CestaUseCase _sut;
 
     public CestaUseCaseTests()
     {
         _cestaRepositoryMock = Substitute.For<ICestaRecomendacaoRepository>();
+        _rebalanceamentoUseCaseMock = Substitute.For<IRebalanceamentoPorMudancaCestaUseCase>();
         _unitOfWorkMock = Substitute.For<IUnitOfWork>();
-        _sut = new CestaUseCase(_cestaRepositoryMock, _unitOfWorkMock);
+        _sut = new CestaUseCase(_cestaRepositoryMock, _rebalanceamentoUseCaseMock, _unitOfWorkMock);
     }
 
     [Fact]
@@ -63,6 +65,7 @@ public class CestaUseCaseTests
         cestaAntiga.DataDesativacao.Should().NotBeNull();
 
         _cestaRepositoryMock.Received(1).Atualizar(cestaAntiga);
+        await _rebalanceamentoUseCaseMock.Received(1).ExecutarRebalanceamentoAsync(cestaAntiga, Arg.Is<CestaRecomendacao>(c => c.Nome == "Nova Cesta"));
         await _cestaRepositoryMock.Received(1).AdicionarAsync(Arg.Is<CestaRecomendacao>(c => c.Nome == "Nova Cesta"));
         await _unitOfWorkMock.Received(1).CommitAsync();
     }
