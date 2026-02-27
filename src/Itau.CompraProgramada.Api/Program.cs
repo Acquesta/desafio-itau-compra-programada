@@ -49,6 +49,7 @@ builder.Services.AddSingleton<CalculadoraLoteFracionarioService>();
 builder.Services.AddSingleton<DistribuicaoProporcionalService>();
 
 // Casos de Uso (Application)
+builder.Services.AddScoped<IClienteUseCase, ClienteUseCase>();
 builder.Services.AddScoped<IMotorCompraProgramadaUseCase, MotorCompraProgramadaUseCase>();
 builder.Services.AddScoped<IRebalanceamentoUseCase, RebalanceamentoUseCase>();
 

@@ -19,6 +19,11 @@ public class ClienteRepository : IClienteRepository
 
     public async Task<Cliente?> ObterPorIdAsync(long id)
     {
+        return await _context.Clientes.FindAsync(id);
+    }
+
+    public async Task<Cliente?> ObterPorIdComCustodiaAsync(long id)
+    {
         // O Include e ThenInclude garantem que trazemos as contas e as ações em custódia juntas!
         return await _context.Clientes
             .Include(c => c.ContaGrafica)
@@ -38,6 +43,11 @@ public class ClienteRepository : IClienteRepository
                 .ThenInclude(cg => cg.Custodias)
             .Where(c => c.Ativo)
             .ToListAsync();
+    }
+
+    public async Task<bool> ExisteCpfAsync(string cpf)
+    {
+        return await _context.Clientes.AnyAsync(c => c.Cpf == cpf);
     }
 
     public async Task AdicionarAsync(Cliente cliente)
