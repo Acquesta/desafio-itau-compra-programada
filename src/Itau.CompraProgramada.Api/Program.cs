@@ -36,7 +36,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // 3. Registar as Injeções de Dependência (A magia da Clean Architecture!)
 // Repositórios
 builder.Services.AddScoped<IClienteRepository, ClienteRepository>();
-builder.Services.AddScoped<ICestaRepository, CestaRepository>();
+builder.Services.AddScoped<ICestaRecomendacaoRepository, CestaRecomendacaoRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 // Integrações Externas (Infra)
@@ -50,6 +50,7 @@ builder.Services.AddSingleton<DistribuicaoProporcionalService>();
 
 // Casos de Uso (Application)
 builder.Services.AddScoped<IClienteUseCase, ClienteUseCase>();
+builder.Services.AddScoped<ICestaUseCase, CestaUseCase>();
 builder.Services.AddScoped<IMotorCompraProgramadaUseCase, MotorCompraProgramadaUseCase>();
 builder.Services.AddScoped<IRebalanceamentoUseCase, RebalanceamentoUseCase>();
 
