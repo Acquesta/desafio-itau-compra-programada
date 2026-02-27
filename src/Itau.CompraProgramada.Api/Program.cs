@@ -52,6 +52,7 @@ builder.Services.AddScoped<DataCompraService>();
 // Casos de Uso (Application)
 builder.Services.AddScoped<IClienteUseCase, ClienteUseCase>();
 builder.Services.AddScoped<ICestaUseCase, CestaUseCase>();
+builder.Services.AddScoped<IContaMasterUseCase, ContaMasterUseCase>();
 builder.Services.AddScoped<IMotorCompraProgramadaUseCase, MotorCompraProgramadaUseCase>();
 builder.Services.AddScoped<IRebalanceamentoUseCase, RebalanceamentoUseCase>();
 

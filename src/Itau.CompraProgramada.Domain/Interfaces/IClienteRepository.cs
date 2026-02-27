@@ -8,6 +8,10 @@ public interface IClienteRepository
     Task<Cliente?> ObterPorIdComCustodiaAsync(long id);
     Task<Cliente?> ObterPorCpfAsync(string cpf);
     Task<IEnumerable<Cliente>> ObterClientesAtivosComCustodiaAsync();
+    
+    // Conta Master
+    Task<Cliente?> ObterClienteMasterAsync();
+
     Task<bool> ExisteCpfAsync(string cpf);
     Task AdicionarAsync(Cliente cliente);
     void Atualizar(Cliente cliente);

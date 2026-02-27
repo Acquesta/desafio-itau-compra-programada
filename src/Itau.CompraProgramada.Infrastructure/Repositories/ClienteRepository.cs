@@ -41,8 +41,16 @@ public class ClienteRepository : IClienteRepository
         return await _context.Clientes
             .Include(c => c.ContaGrafica)
                 .ThenInclude(cg => cg.Custodias)
-            .Where(c => c.Ativo)
+            .Where(c => c.Ativo && c.ContaGrafica.Tipo == Domain.Enums.TipoContaGrafica.Filhote)
             .ToListAsync();
+    }
+
+    public async Task<Cliente?> ObterClienteMasterAsync()
+    {
+        return await _context.Clientes
+            .Include(c => c.ContaGrafica)
+                .ThenInclude(cg => cg.Custodias)
+            .FirstOrDefaultAsync(c => c.ContaGrafica.Tipo == Domain.Enums.TipoContaGrafica.Master);
     }
 
     public async Task<bool> ExisteCpfAsync(string cpf)
