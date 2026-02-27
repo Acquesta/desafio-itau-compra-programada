@@ -13,6 +13,7 @@ public class MotorCompraProgramadaUseCaseTests
     private readonly IClienteRepository _clienteRepositoryMock;
     private readonly ICestaRecomendacaoRepository _cestaRepositoryMock;
     private readonly ICotacaoB3Provider _cotacaoProviderMock;
+    private readonly IOrdemCompraRepository _ordemCompraRepositoryMock;
     private readonly IEventoIRPublisher _eventoIRPublisherMock;
     private readonly IUnitOfWork _unitOfWorkMock;
     private readonly MotorCompraProgramadaUseCase _sut;
@@ -22,6 +23,7 @@ public class MotorCompraProgramadaUseCaseTests
         _clienteRepositoryMock = Substitute.For<IClienteRepository>();
         _cestaRepositoryMock = Substitute.For<ICestaRecomendacaoRepository>();
         _cotacaoProviderMock = Substitute.For<ICotacaoB3Provider>();
+        _ordemCompraRepositoryMock = Substitute.For<IOrdemCompraRepository>();
         _eventoIRPublisherMock = Substitute.For<IEventoIRPublisher>();
         _unitOfWorkMock = Substitute.For<IUnitOfWork>();
 
@@ -33,6 +35,7 @@ public class MotorCompraProgramadaUseCaseTests
             _clienteRepositoryMock,
             _cestaRepositoryMock,
             _cotacaoProviderMock,
+            _ordemCompraRepositoryMock,
             _eventoIRPublisherMock,
             _unitOfWorkMock,
             calculadora,
@@ -41,17 +44,18 @@ public class MotorCompraProgramadaUseCaseTests
     }
 
     [Fact]
-    public async Task ExecutarComprasAsync_DataNaoEhDiaDeCompra_DeveRetornarMensagemInvalida()
+    public async Task ExecutarComprasAsync_DataNaoEhDiaDeCompra_DeveLancarInvalidOperationException()
     {
         // Arrange
         // Dia 10 não é dia de compra
         var dataReferencia = new DateTime(2023, 10, 10);
 
         // Act
-        var result = await _sut.ExecutarComprasAsync(dataReferencia);
+        var act = async () => await _sut.ExecutarComprasAsync(dataReferencia);
 
         // Assert
-        result.Should().Contain("não é um dia válido");
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*não é um dia válido*");
         await _unitOfWorkMock.DidNotReceive().CommitAsync();
     }
 
@@ -68,7 +72,8 @@ public class MotorCompraProgramadaUseCaseTests
         var result = await _sut.ExecutarComprasAsync(dataReferencia);
 
         // Assert
-        result.Should().Contain("Compra executada com sucesso");
+        result.ClientesProcessados.Should().Be(1);
+        result.OrdensExecutadas.Should().NotBeEmpty();
         await _unitOfWorkMock.Received(1).CommitAsync();
     }
 

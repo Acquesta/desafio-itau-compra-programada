@@ -28,7 +28,7 @@ public class ComprasController : ControllerBase
             var data = dataReferencia ?? DateTime.Today;
             var resultado = await _motorCompra.ExecutarComprasAsync(data);
             
-            return Ok(new { Mensagem = resultado });
+            return Ok(resultado);
         }
         catch (InvalidOperationException ex)
         {

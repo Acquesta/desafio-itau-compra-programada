@@ -71,13 +71,25 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<OrdemCompra>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.PrecoUnitario).HasPrecision(18, 2);
+            entity.Property(e => e.PrecoUnitario).HasPrecision(18, 5);
+            
+            // OrdemCompra 1 -> N Distribuicao
+            entity.HasMany(e => e.Distribuicoes)
+                  .WithOne(d => d.OrdemCompra)
+                  .HasForeignKey(d => d.OrdemCompraId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Distribuicao>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.PrecoUnitario).HasPrecision(18, 2);
+            entity.Property(e => e.PrecoUnitario).HasPrecision(18, 5);
+            
+            // Distribuicao N -> 1 Cliente
+            entity.HasOne<Cliente>()
+                  .WithMany()
+                  .HasForeignKey(d => d.CustodiaFilhoteId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<EventoIR>(entity =>

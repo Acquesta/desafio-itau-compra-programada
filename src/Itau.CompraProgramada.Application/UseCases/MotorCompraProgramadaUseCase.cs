@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Itau.CompraProgramada.Application.DTOs;
 using Itau.CompraProgramada.Domain.Entities;
 using Itau.CompraProgramada.Domain.Enums;
 using Itau.CompraProgramada.Domain.Interfaces;
@@ -13,6 +15,7 @@ public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
     private readonly IClienteRepository _clienteRepository;
     private readonly ICestaRecomendacaoRepository _cestaRepository;
     private readonly ICotacaoB3Provider _cotacaoProvider;
+    private readonly IOrdemCompraRepository _ordemCompraRepository;
     private readonly IEventoIRPublisher _eventoIRPublisher;
     private readonly IUnitOfWork _unitOfWork;
     
@@ -25,6 +28,7 @@ public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
         IClienteRepository clienteRepository,
         ICestaRecomendacaoRepository cestaRepository,
         ICotacaoB3Provider cotacaoProvider,
+        IOrdemCompraRepository ordemCompraRepository,
         IEventoIRPublisher eventoIRPublisher,
         IUnitOfWork unitOfWork,
         CalculadoraLoteFracionarioService calculadoraLote,
@@ -34,19 +38,19 @@ public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
         _clienteRepository = clienteRepository;
         _cestaRepository = cestaRepository;
         _cotacaoProvider = cotacaoProvider;
+        _ordemCompraRepository = ordemCompraRepository;
         _eventoIRPublisher = eventoIRPublisher;
         _unitOfWork = unitOfWork;
         _calculadoraLote = calculadoraLote;
         _distribuicaoService = distribuicaoService;
         _dataCompraService = dataCompraService;
     }
-
-    public async Task<string> ExecutarComprasAsync(DateTime dataReferencia)
+    public async Task<MotorCompraResponse> ExecutarComprasAsync(DateTime dataReferencia)
     {
         // RN-020 a RN-022: Validação da data de compra (apenas dias úteis 5, 15, 25)
         if (!_dataCompraService.EhDiaDeCompraValido(dataReferencia))
         {
-            return $"A data {dataReferencia:dd/MM/yyyy} não é um dia válido para execução da compra programada.";
+            throw new InvalidOperationException($"A data {dataReferencia:dd/MM/yyyy} não é um dia válido para execução da compra programada.");
         }
 
         // 1. Obter a Cesta Ativa
@@ -57,7 +61,7 @@ public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
         // 2. Obter Clientes Ativos
         var clientes = (await _clienteRepository.ObterClientesAtivosComCustodiaAsync()).ToList();
         if (!clientes.Any())
-            return "Nenhum cliente ativo para processar.";
+            return new MotorCompraResponse(0, 0, new List<OrdemExecutadaDto>());
 
         // 2.1 Obter Conta Master (RN-029, RN-030)
         var master = await _clienteRepository.ObterClienteMasterAsync();
@@ -81,6 +85,7 @@ public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
         decimal totalAportes = aportesClientes.Values.Sum();
 
         int eventosPublicados = 0;
+        var ordensAgrupadasResponse = new List<OrdemExecutadaDto>();
 
         // 5. Processar cada ativo da cesta individualmente
         foreach (var item in cesta.Itens)
@@ -104,10 +109,20 @@ public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
 
             // 6. Calcular a divisão em Lote Padrão e Mercado Fracionário (Apenas informativo para o log/ordem)
             var divisoesMercado = _calculadoraLote.Calcular(ticker, qtdTotalDisponivelDistribuicao);
+            
+            // RN-031 a RN-033: Persistir as divisões do tipo de mercado na Conta Master (Lote vs Fracionário)
+            var ordensParaSalvar = new List<OrdemCompra>();
+            
+            if (divisoesMercado.QtdLote > 0)
+                ordensParaSalvar.Add(new OrdemCompra(master.Id, ticker, divisoesMercado.QtdLote, precoCotacao, TipoMercado.Lote));
+                
+            if (divisoesMercado.QtdFracionaria > 0)
+                ordensParaSalvar.Add(new OrdemCompra(master.Id, ticker, divisoesMercado.QtdFracionaria, precoCotacao, TipoMercado.Fracionario));
 
             // 7. Rateio Proporcional entre os Clientes
             // O serviço de domínio trata a matemática complexa da distribuição e retorna o que sobra!
             var resultadoRateio = _distribuicaoService.Distribuir(qtdTotalDisponivelDistribuicao, aportesClientes);
+
 
             foreach (var distribuicao in resultadoRateio.Distribuicoes)
             {
@@ -138,7 +153,14 @@ public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
                 
                 // Informar ao repositório que este cliente sofreu alterações
                 _clienteRepository.Atualizar(cliente);
+                
+                // Associar todas as distribuições às Ordens de Compra criadas neste loop (RN-032)
+                foreach(var ordem in ordensParaSalvar)
+                    ordem.AdicionarDistribuicao(new Distribuicao(ordem.Id, cliente.Id, ticker, distribuicao.Quantidade, precoCotacao));
             }
+            
+            // Salvar Ordens de Compra geradas no banco
+            await _ordemCompraRepository.SalvarVariosAsync(ordensParaSalvar);
 
             // RN-039 / RN-040: O que sobrou na divisão fracionária fica para a Conta Master
             if (resultadoRateio.ResiduoMaster > 0 || qtdDisponivelMaster > 0)
@@ -158,11 +180,20 @@ public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
                 
                 _clienteRepository.Atualizar(master);
             }
+            
+            if (divisoesMercado.QtdLote > 0 || divisoesMercado.QtdFracionaria > 0)
+            {
+                ordensAgrupadasResponse.Add(new OrdemExecutadaDto(
+                    ticker, 
+                    divisoesMercado.QtdLote, 
+                    divisoesMercado.QtdFracionaria, 
+                    precoCotacao));
+            }
         }
 
         // 9. Guardar tudo na base de dados numa transação única!
         await _unitOfWork.CommitAsync();
 
-        return $"Compra executada com sucesso para {clientes.Count} clientes. {eventosPublicados} eventos de retenção na fonte publicados.";
+        return new MotorCompraResponse(clientes.Count, eventosPublicados, ordensAgrupadasResponse);
     }
 }

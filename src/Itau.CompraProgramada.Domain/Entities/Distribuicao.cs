@@ -11,6 +11,8 @@ public class Distribuicao
     public int Quantidade { get; private set; }
     public decimal PrecoUnitario { get; private set; }
     public DateTime DataDistribuicao { get; private set; }
+    
+    public OrdemCompra OrdemCompra { get; private set; }
 
     protected Distribuicao() { }
 
