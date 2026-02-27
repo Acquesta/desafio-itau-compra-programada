@@ -19,16 +19,14 @@ public class ComprasController : ControllerBase
     /// <summary>
     /// Executa o Motor de Compra Programada para todos os clientes ativos.
     /// </summary>
-    /// <param name="caminhoArquivo">O caminho local para o ficheiro COTAHIST_D*.TXT da B3</param>
+    /// <param name="dataReferencia">Data de referência para a execução da compra (por padrão hoje)</param>
     [HttpPost("executar")]
-    public async Task<IActionResult> ExecutarCompraProgramada([FromQuery] string caminhoArquivo)
+    public async Task<IActionResult> ExecutarCompraProgramada([FromQuery] DateTime? dataReferencia)
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(caminhoArquivo))
-                return BadRequest(new { Erro = "O caminho do ficheiro COTAHIST é obrigatório." });
-
-            var resultado = await _motorCompra.ExecutarComprasAsync(caminhoArquivo);
+            var data = dataReferencia ?? DateTime.Today;
+            var resultado = await _motorCompra.ExecutarComprasAsync(data);
             
             return Ok(new { Mensagem = resultado });
         }

@@ -11,7 +11,7 @@ namespace Itau.CompraProgramada.Application.UseCases;
 public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
 {
     private readonly IClienteRepository _clienteRepository;
-    private readonly ICestaRepository _cestaRepository;
+    private readonly ICestaRecomendacaoRepository _cestaRepository;
     private readonly ICotacaoB3Provider _cotacaoProvider;
     private readonly IEventoIRPublisher _eventoIRPublisher;
     private readonly IUnitOfWork _unitOfWork;
@@ -19,15 +19,17 @@ public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
     // Serviços de Domínio injetados via DI
     private readonly CalculadoraLoteFracionarioService _calculadoraLote;
     private readonly DistribuicaoProporcionalService _distribuicaoService;
+    private readonly DataCompraService _dataCompraService;
 
     public MotorCompraProgramadaUseCase(
         IClienteRepository clienteRepository,
-        ICestaRepository cestaRepository,
+        ICestaRecomendacaoRepository cestaRepository,
         ICotacaoB3Provider cotacaoProvider,
         IEventoIRPublisher eventoIRPublisher,
         IUnitOfWork unitOfWork,
         CalculadoraLoteFracionarioService calculadoraLote,
-        DistribuicaoProporcionalService distribuicaoService)
+        DistribuicaoProporcionalService distribuicaoService,
+        DataCompraService dataCompraService)
     {
         _clienteRepository = clienteRepository;
         _cestaRepository = cestaRepository;
@@ -36,12 +38,19 @@ public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
         _unitOfWork = unitOfWork;
         _calculadoraLote = calculadoraLote;
         _distribuicaoService = distribuicaoService;
+        _dataCompraService = dataCompraService;
     }
 
-    public async Task<string> ExecutarComprasAsync(string caminhoArquivoCotacao)
+    public async Task<string> ExecutarComprasAsync(DateTime dataReferencia)
     {
+        // RN-020 a RN-022: Validação da data de compra (apenas dias úteis 5, 15, 25)
+        if (!_dataCompraService.EhDiaDeCompraValido(dataReferencia))
+        {
+            return $"A data {dataReferencia:dd/MM/yyyy} não é um dia válido para execução da compra programada.";
+        }
+
         // 1. Obter a Cesta Ativa
-        var cesta = await _cestaRepository.ObterCestaAtivaAsync();
+        var cesta = await _cestaRepository.ObterAtivaAsync();
         if (cesta == null)
             throw new InvalidOperationException("Nenhuma cesta de recomendação ativa encontrada.");
 
@@ -51,7 +60,7 @@ public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
             return "Nenhum cliente ativo para processar.";
 
         // 3. Ler Cotações do ficheiro da B3 e colocar num Dicionário em memória
-        var cotacoes = _cotacaoProvider.ObterCotacoesDeFechamento(caminhoArquivoCotacao)
+        var cotacoes = _cotacaoProvider.ObterCotacoesDeFechamento()
             .ToDictionary(c => c.Ticker, c => c.PrecoFechamento);
 
         // Validar se o ficheiro tem a cotação de todos os ativos da cesta
@@ -62,7 +71,8 @@ public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
         }
 
         // 4. Calcular o montante financeiro total a investir
-        var aportesClientes = clientes.ToDictionary(c => c.Id, c => c.ValorMensal);
+        // RN-023: Usar apenas 1/3 do valor mensal configurado (arredondado para 2 casas)
+        var aportesClientes = clientes.ToDictionary(c => c.Id, c => Math.Round(c.ValorMensal / 3m, 2));
         decimal totalAportes = aportesClientes.Values.Sum();
 
         int eventosPublicados = 0;

@@ -4,5 +4,5 @@ namespace Itau.CompraProgramada.Domain.Interfaces;
 
 public interface ICotacaoB3Provider
 {
-    IEnumerable<CotacaoDto> ObterCotacoesDeFechamento(string caminhoArquivo);
+    IEnumerable<CotacaoDto> ObterCotacoesDeFechamento();
 }

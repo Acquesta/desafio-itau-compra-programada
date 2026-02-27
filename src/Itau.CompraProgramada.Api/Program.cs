@@ -44,9 +44,10 @@ builder.Services.AddScoped<ICotacaoB3Provider, CotacaoB3Provider>();
 // O Publisher do Kafka é adicionado como Singleton por questões de performance do Producer
 builder.Services.AddSingleton<IEventoIRPublisher, EventoIRPublisher>(); 
 
-// Serviços de Domínio (puros, sem estado)
-builder.Services.AddSingleton<CalculadoraLoteFracionarioService>();
-builder.Services.AddSingleton<DistribuicaoProporcionalService>();
+// Serviços de Domínio
+builder.Services.AddScoped<CalculadoraLoteFracionarioService>();
+builder.Services.AddScoped<DistribuicaoProporcionalService>();
+builder.Services.AddScoped<DataCompraService>();
 
 // Casos de Uso (Application)
 builder.Services.AddScoped<IClienteUseCase, ClienteUseCase>();
