@@ -16,7 +16,7 @@ public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
     private readonly IEventoIRPublisher _eventoIRPublisher;
     private readonly IUnitOfWork _unitOfWork;
     
-    // Serviços de Domínio puros (sem estado)
+    // Serviços de Domínio injetados via DI
     private readonly CalculadoraLoteFracionarioService _calculadoraLote;
     private readonly DistribuicaoProporcionalService _distribuicaoService;
 
@@ -25,16 +25,17 @@ public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
         ICestaRepository cestaRepository,
         ICotacaoB3Provider cotacaoProvider,
         IEventoIRPublisher eventoIRPublisher,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        CalculadoraLoteFracionarioService calculadoraLote,
+        DistribuicaoProporcionalService distribuicaoService)
     {
         _clienteRepository = clienteRepository;
         _cestaRepository = cestaRepository;
         _cotacaoProvider = cotacaoProvider;
         _eventoIRPublisher = eventoIRPublisher;
         _unitOfWork = unitOfWork;
-        
-        _calculadoraLote = new CalculadoraLoteFracionarioService();
-        _distribuicaoService = new DistribuicaoProporcionalService();
+        _calculadoraLote = calculadoraLote;
+        _distribuicaoService = distribuicaoService;
     }
 
     public async Task<string> ExecutarComprasAsync(string caminhoArquivoCotacao)

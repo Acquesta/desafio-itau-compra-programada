@@ -40,7 +40,7 @@ public class RebalanceamentoUseCase : IRebalanceamentoUseCase
 
         // 2. Atualizar a Custódia (Subtrair as ações vendidas)
         // O Preço Médio NÃO muda na venda, apenas a quantidade!
-        custodia.AtualizarQuantidadeVenda(quantidade);
+        custodia.RemoverVenda(quantidade);
 
         string mensagemRetorno = $"Venda de {quantidade} {ticker} executada. Valor total: R$ {valorTotalVenda:N2}.";
 

@@ -1,5 +1,6 @@
 using Itau.CompraProgramada.Application.UseCases;
 using Itau.CompraProgramada.Domain.Interfaces;
+using Itau.CompraProgramada.Domain.Services;
 using Itau.CompraProgramada.Infrastructure.B3;
 using Itau.CompraProgramada.Infrastructure.Data;
 using Itau.CompraProgramada.Infrastructure.Mensageria;
@@ -14,8 +15,9 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("CorsSeguro", policy =>
     {
-        // Trava o acesso apenas para a URL onde o React está rodando
-        policy.WithOrigins("http://localhost:5173") 
+        var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() 
+            ?? new[] { "http://localhost:5173" };
+        policy.WithOrigins(corsOrigins) 
               .AllowAnyMethod()
               .AllowAnyHeader();
     });
@@ -41,6 +43,10 @@ builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<ICotacaoB3Provider, CotacaoB3Provider>();
 // O Publisher do Kafka é adicionado como Singleton por questões de performance do Producer
 builder.Services.AddSingleton<IEventoIRPublisher, EventoIRPublisher>(); 
+
+// Serviços de Domínio (puros, sem estado)
+builder.Services.AddSingleton<CalculadoraLoteFracionarioService>();
+builder.Services.AddSingleton<DistribuicaoProporcionalService>();
 
 // Casos de Uso (Application)
 builder.Services.AddScoped<IMotorCompraProgramadaUseCase, MotorCompraProgramadaUseCase>();
