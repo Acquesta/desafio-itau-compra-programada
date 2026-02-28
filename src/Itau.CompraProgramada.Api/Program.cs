@@ -60,6 +60,7 @@ builder.Services.AddScoped<IMotorCompraProgramadaUseCase, MotorCompraProgramadaU
 builder.Services.AddScoped<IRebalanceamentoUseCase, RebalanceamentoUseCase>();
 builder.Services.AddScoped<IRebalanceamentoPorMudancaCestaUseCase, RebalanceamentoPorMudancaCestaUseCase>();
 builder.Services.AddScoped<IRebalanceamentoPorDesvioUseCase, RebalanceamentoPorDesvioUseCase>();
+builder.Services.AddScoped<IRentabilidadeUseCase, RentabilidadeUseCase>();
 
 var app = builder.Build();
 
