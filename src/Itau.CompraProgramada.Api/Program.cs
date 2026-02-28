@@ -50,6 +50,7 @@ builder.Services.AddScoped<CalculadoraLoteFracionarioService>();
 builder.Services.AddScoped<DistribuicaoProporcionalService>();
 builder.Services.AddScoped<DataCompraService>();
 builder.Services.AddScoped<CalculoDesvioService>();
+builder.Services.AddScoped<CalculoIRService>();
 
 // Casos de Uso (Application)
 builder.Services.AddScoped<IClienteUseCase, ClienteUseCase>();
