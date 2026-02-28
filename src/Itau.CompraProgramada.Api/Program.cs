@@ -49,6 +49,7 @@ builder.Services.AddSingleton<IEventoIRPublisher, EventoIRPublisher>();
 builder.Services.AddScoped<CalculadoraLoteFracionarioService>();
 builder.Services.AddScoped<DistribuicaoProporcionalService>();
 builder.Services.AddScoped<DataCompraService>();
+builder.Services.AddScoped<CalculoDesvioService>();
 
 // Casos de Uso (Application)
 builder.Services.AddScoped<IClienteUseCase, ClienteUseCase>();
@@ -57,6 +58,7 @@ builder.Services.AddScoped<IContaMasterUseCase, ContaMasterUseCase>();
 builder.Services.AddScoped<IMotorCompraProgramadaUseCase, MotorCompraProgramadaUseCase>();
 builder.Services.AddScoped<IRebalanceamentoUseCase, RebalanceamentoUseCase>();
 builder.Services.AddScoped<IRebalanceamentoPorMudancaCestaUseCase, RebalanceamentoPorMudancaCestaUseCase>();
+builder.Services.AddScoped<IRebalanceamentoPorDesvioUseCase, RebalanceamentoPorDesvioUseCase>();
 
 var app = builder.Build();
 
