@@ -6,7 +6,9 @@ using FluentAssertions;
 using Itau.CompraProgramada.Application.UseCases;
 using Itau.CompraProgramada.Domain.Entities;
 using Itau.CompraProgramada.Domain.Enums;
+using Itau.CompraProgramada.Domain.Enums;
 using Itau.CompraProgramada.Domain.Interfaces;
+using Itau.CompraProgramada.Domain.Services;
 using NSubstitute;
 using Xunit;
 
@@ -16,6 +18,8 @@ public class RebalanceamentoPorMudancaCestaUseCaseTests
 {
     private readonly IClienteRepository _clienteRepositoryMock;
     private readonly ICotacaoB3Provider _cotacaoProviderMock;
+    private readonly IRebalanceamentoRepository _rebalanceamentoRepositoryMock;
+    private readonly CalculoIRService _calculoIRService;
     private readonly IEventoIRPublisher _eventoIRPublisherMock;
     private readonly IUnitOfWork _unitOfWorkMock;
     private readonly RebalanceamentoPorMudancaCestaUseCase _sut;
@@ -24,12 +28,16 @@ public class RebalanceamentoPorMudancaCestaUseCaseTests
     {
         _clienteRepositoryMock = Substitute.For<IClienteRepository>();
         _cotacaoProviderMock = Substitute.For<ICotacaoB3Provider>();
+        _rebalanceamentoRepositoryMock = Substitute.For<IRebalanceamentoRepository>();
         _eventoIRPublisherMock = Substitute.For<IEventoIRPublisher>();
         _unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        _calculoIRService = new CalculoIRService();
 
         _sut = new RebalanceamentoPorMudancaCestaUseCase(
             _clienteRepositoryMock,
             _cotacaoProviderMock,
+            _rebalanceamentoRepositoryMock,
+            _calculoIRService,
             _eventoIRPublisherMock,
             _unitOfWorkMock
         );
@@ -77,6 +85,9 @@ public class RebalanceamentoPorMudancaCestaUseCaseTests
             new CotacaoDto { Ticker = "BBDC4", PrecoFechamento = 15m },
             new CotacaoDto { Ticker = "WEGE3", PrecoFechamento = 40m }
         });
+
+        _rebalanceamentoRepositoryMock.ObterVendasMesCorrenteAsync(Arg.Any<long>(), Arg.Any<int>(), Arg.Any<int>())
+            .Returns(new List<Rebalanceamento>());
 
         // Act
         await _sut.ExecutarRebalanceamentoAsync(cestaAntiga, cestaNova);
@@ -135,6 +146,9 @@ public class RebalanceamentoPorMudancaCestaUseCaseTests
             new CotacaoDto { Ticker = "ABEV3", PrecoFechamento = 14m },
             new CotacaoDto { Ticker = "RENT3", PrecoFechamento = 48m }
         });
+
+        _rebalanceamentoRepositoryMock.ObterVendasMesCorrenteAsync(Arg.Any<long>(), Arg.Any<int>(), Arg.Any<int>())
+            .Returns(new List<Rebalanceamento>());
 
         // Act
         await _sut.ExecutarRebalanceamentoAsync(cestaAntiga, cestaNova);

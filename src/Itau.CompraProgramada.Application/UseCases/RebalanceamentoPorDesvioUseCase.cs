@@ -18,6 +18,9 @@ public class RebalanceamentoPorDesvioUseCase : IRebalanceamentoPorDesvioUseCase
     private readonly ICestaRecomendacaoRepository _cestaRepository;
     private readonly ICotacaoB3Provider _cotacaoProvider;
     private readonly CalculoDesvioService _calculoDesvioService;
+    private readonly IRebalanceamentoRepository _rebalanceamentoRepository;
+    private readonly CalculoIRService _calculoIRService;
+    private readonly IEventoIRPublisher _eventoIRPublisher;
     private readonly IUnitOfWork _unitOfWork;
 
     public RebalanceamentoPorDesvioUseCase(
@@ -25,12 +28,18 @@ public class RebalanceamentoPorDesvioUseCase : IRebalanceamentoPorDesvioUseCase
         ICestaRecomendacaoRepository cestaRepository,
         ICotacaoB3Provider cotacaoProvider,
         CalculoDesvioService calculoDesvioService,
+        IRebalanceamentoRepository rebalanceamentoRepository,
+        CalculoIRService calculoIRService,
+        IEventoIRPublisher eventoIRPublisher,
         IUnitOfWork unitOfWork)
     {
         _clienteRepository = clienteRepository;
         _cestaRepository = cestaRepository;
         _cotacaoProvider = cotacaoProvider;
         _calculoDesvioService = calculoDesvioService;
+        _rebalanceamentoRepository = rebalanceamentoRepository;
+        _calculoIRService = calculoIRService;
+        _eventoIRPublisher = eventoIRPublisher;
         _unitOfWork = unitOfWork;
     }
 
@@ -77,8 +86,23 @@ public class RebalanceamentoPorDesvioUseCase : IRebalanceamentoPorDesvioUseCase
                 {
                     // Sobre-alocado: vender excesso
                     int qtdVender = qtdAtual - qtdAlvo;
-                    custodia!.RemoverVenda(qtdVender);
+                    var precoMedioAntigo = custodia!.PrecoMedio;
+                    
+                    custodia.RemoverVenda(qtdVender);
                     totalVendas += qtdVender;
+                    
+                    decimal valorOperacao = qtdVender * preco;
+                    decimal lucroDaOperacao = (preco - precoMedioAntigo) * qtdVender;
+                    
+                    await _rebalanceamentoRepository.AdicionarAsync(new Rebalanceamento(
+                        cliente.Id, 
+                        Itau.CompraProgramada.Domain.Enums.TipoRebalanceamento.Desvio,
+                        item.Ticker,
+                        "",
+                        valorOperacao,
+                        qtdVender,
+                        precoMedioAntigo,
+                        lucroDaOperacao));
                 }
                 else if (qtdAtual < qtdAlvo)
                 {
@@ -102,8 +126,46 @@ public class RebalanceamentoPorDesvioUseCase : IRebalanceamentoPorDesvioUseCase
                 if (custodia.Quantidade > 0)
                 {
                     totalVendas += custodia.Quantidade;
+                    
+                    var precoMedioAntigo = custodia.PrecoMedio;
+                    decimal precoVendaAtivo = cotacoes.TryGetValue(custodia.Ticker, out var precoCusto) ? precoCusto : 0m;
+                    decimal valorOperacao = custodia.Quantidade * precoVendaAtivo;
+                    decimal lucroDaOperacao = (precoVendaAtivo - precoMedioAntigo) * custodia.Quantidade;
+                    
+                    await _rebalanceamentoRepository.AdicionarAsync(new Rebalanceamento(
+                        cliente.Id, 
+                        Itau.CompraProgramada.Domain.Enums.TipoRebalanceamento.Desvio,
+                        custodia.Ticker,
+                        "",
+                        valorOperacao,
+                        custodia.Quantidade,
+                        precoMedioAntigo,
+                        lucroDaOperacao));
+                        
                     custodia.RemoverVenda(custodia.Quantidade);
                 }
+            }
+
+            // RN-057 a RN-061: Calcular o IR sobre as vendas deste cliente neste mês (se exceder os 20k de vendas)
+            var vendasMes = await _rebalanceamentoRepository.ObterVendasMesCorrenteAsync(cliente.Id, DateTime.UtcNow.Month, DateTime.UtcNow.Year);
+            decimal valorTotalVendasMes = vendasMes.Sum(v => v.ValorVenda);
+            decimal lucroLiquidoTotal = vendasMes.Sum(v => v.LucroLiquido);
+            
+            decimal impostoDevido = _calculoIRService.CalcularIRSobreVendas(valorTotalVendasMes, lucroLiquidoTotal);
+            
+            if (impostoDevido > 0)
+            {
+                var eventoIR = new EventoIR(
+                    cliente.Id, 
+                    cliente.Cpf, 
+                    "MULTIPLE", 
+                    Itau.CompraProgramada.Domain.Enums.TipoEventoIR.Venda20Percent, 
+                    lucroLiquidoTotal, 
+                    impostoDevido, 
+                    1, 
+                    1m); // Estes dois últimos parâmetros não fazem sentido pro payload global, mas instanciam o evento corretamente
+                    
+                await _eventoIRPublisher.PublicarEventoAsync(eventoIR);
             }
 
             _clienteRepository.Atualizar(cliente);

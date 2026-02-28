@@ -103,6 +103,8 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ValorVenda).HasPrecision(18, 2);
+            entity.Property(e => e.PrecoMedio).HasPrecision(18, 4);
+            entity.Property(e => e.LucroLiquido).HasPrecision(18, 2);
         });
     }
 }

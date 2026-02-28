@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Itau.CompraProgramada.Domain.Entities;
 using Itau.CompraProgramada.Domain.Interfaces;
+using Itau.CompraProgramada.Domain.Services;
 
 namespace Itau.CompraProgramada.Application.UseCases;
 
@@ -11,17 +12,23 @@ public class RebalanceamentoPorMudancaCestaUseCase : IRebalanceamentoPorMudancaC
 {
     private readonly IClienteRepository _clienteRepository;
     private readonly ICotacaoB3Provider _cotacaoProvider;
+    private readonly IRebalanceamentoRepository _rebalanceamentoRepository;
+    private readonly CalculoIRService _calculoIRService;
     private readonly IEventoIRPublisher _eventoIRPublisher;
     private readonly IUnitOfWork _unitOfWork;
 
     public RebalanceamentoPorMudancaCestaUseCase(
         IClienteRepository clienteRepository,
         ICotacaoB3Provider cotacaoProvider,
+        IRebalanceamentoRepository rebalanceamentoRepository,
+        CalculoIRService calculoIRService,
         IEventoIRPublisher eventoIRPublisher,
         IUnitOfWork unitOfWork)
     {
         _clienteRepository = clienteRepository;
         _cotacaoProvider = cotacaoProvider;
+        _rebalanceamentoRepository = rebalanceamentoRepository;
+        _calculoIRService = calculoIRService;
         _eventoIRPublisher = eventoIRPublisher;
         _unitOfWork = unitOfWork;
     }
@@ -63,7 +70,23 @@ public class RebalanceamentoPorMudancaCestaUseCase : IRebalanceamentoPorMudancaC
                     int qtdParaVender = custodia.Quantidade - qtdAlvo;
 
                     if (qtdParaVender > 0)
+                    {
+                        var precoMedioAntigo = custodia.PrecoMedio;
+                        decimal valorOperacao = qtdParaVender * preco;
+                        decimal lucroDaOperacao = (preco - precoMedioAntigo) * qtdParaVender;
+                        
+                        await _rebalanceamentoRepository.AdicionarAsync(new Rebalanceamento(
+                            cliente.Id, 
+                            Itau.CompraProgramada.Domain.Enums.TipoRebalanceamento.MudancaCesta,
+                            custodia.Ticker,
+                            "",
+                            valorOperacao,
+                            qtdParaVender,
+                            precoMedioAntigo,
+                            lucroDaOperacao));
+                            
                         custodia.RemoverVenda(qtdParaVender);
+                    }
                 }
             }
 
@@ -96,6 +119,28 @@ public class RebalanceamentoPorMudancaCestaUseCase : IRebalanceamentoPorMudancaC
                 }
             }
             
+            // RN-057 a RN-061: Calcular o IR sobre as vendas deste cliente neste mês (se exceder os 20k de vendas)
+            var vendasMes = await _rebalanceamentoRepository.ObterVendasMesCorrenteAsync(cliente.Id, DateTime.UtcNow.Month, DateTime.UtcNow.Year);
+            decimal valorTotalVendasMes = vendasMes.Sum(v => v.ValorVenda);
+            decimal lucroLiquidoTotal = vendasMes.Sum(v => v.LucroLiquido);
+            
+            decimal impostoDevido = _calculoIRService.CalcularIRSobreVendas(valorTotalVendasMes, lucroLiquidoTotal);
+            
+            if (impostoDevido > 0)
+            {
+                var eventoIR = new EventoIR(
+                    cliente.Id, 
+                    cliente.Cpf, 
+                    "MULTIPLE", 
+                    Itau.CompraProgramada.Domain.Enums.TipoEventoIR.Venda20Percent, 
+                    lucroLiquidoTotal, 
+                    impostoDevido, 
+                    1, 
+                    1m); // Estes dois últimos parâmetros não fazem sentido pro payload global, mas instanciam o evento corretamente
+                    
+                await _eventoIRPublisher.PublicarEventoAsync(eventoIR);
+            }
+
             _clienteRepository.Atualizar(cliente);
         }
 

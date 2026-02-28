@@ -40,6 +40,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<IClienteRepository, ClienteRepository>();
 builder.Services.AddScoped<ICestaRecomendacaoRepository, CestaRecomendacaoRepository>();
 builder.Services.AddScoped<IOrdemCompraRepository, OrdemCompraRepository>();
+builder.Services.AddScoped<IRebalanceamentoRepository, RebalanceamentoRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 // Integrações Externas (Infra)

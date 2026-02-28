@@ -20,6 +20,9 @@ public class RebalanceamentoPorDesvioUseCaseTests
     private readonly ICotacaoB3Provider _cotacaoProviderMock;
     private readonly IUnitOfWork _unitOfWorkMock;
     private readonly CalculoDesvioService _calculoDesvioService;
+    private readonly IRebalanceamentoRepository _rebalanceamentoRepositoryMock;
+    private readonly CalculoIRService _calculoIRService;
+    private readonly IEventoIRPublisher _eventoIRPublisherMock;
     private readonly RebalanceamentoPorDesvioUseCase _sut;
 
     public RebalanceamentoPorDesvioUseCaseTests()
@@ -28,13 +31,20 @@ public class RebalanceamentoPorDesvioUseCaseTests
         _cestaRepositoryMock = Substitute.For<ICestaRecomendacaoRepository>();
         _cotacaoProviderMock = Substitute.For<ICotacaoB3Provider>();
         _unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        _rebalanceamentoRepositoryMock = Substitute.For<IRebalanceamentoRepository>();
+        _eventoIRPublisherMock = Substitute.For<IEventoIRPublisher>();
+        
         _calculoDesvioService = new CalculoDesvioService();
+        _calculoIRService = new CalculoIRService();
 
         _sut = new RebalanceamentoPorDesvioUseCase(
             _clienteRepositoryMock,
             _cestaRepositoryMock,
             _cotacaoProviderMock,
             _calculoDesvioService,
+            _rebalanceamentoRepositoryMock,
+            _calculoIRService,
+            _eventoIRPublisherMock,
             _unitOfWorkMock
         );
     }
@@ -86,6 +96,9 @@ public class RebalanceamentoPorDesvioUseCaseTests
             new() { Ticker = "BBDC4", PrecoFechamento = 50m },
             new() { Ticker = "WEGE3", PrecoFechamento = 10m }
         });
+
+        _rebalanceamentoRepositoryMock.ObterVendasMesCorrenteAsync(Arg.Any<long>(), Arg.Any<int>(), Arg.Any<int>())
+            .Returns(new List<Rebalanceamento>());
 
         // Act
         var result = await _sut.ExecutarRebalanceamentoPorDesvioAsync();
@@ -139,6 +152,9 @@ public class RebalanceamentoPorDesvioUseCaseTests
             new() { Ticker = "BBDC4", PrecoFechamento = 50m },
             new() { Ticker = "WEGE3", PrecoFechamento = 50m }
         });
+
+        _rebalanceamentoRepositoryMock.ObterVendasMesCorrenteAsync(Arg.Any<long>(), Arg.Any<int>(), Arg.Any<int>())
+            .Returns(new List<Rebalanceamento>());
 
         // Act
         var result = await _sut.ExecutarRebalanceamentoPorDesvioAsync();
