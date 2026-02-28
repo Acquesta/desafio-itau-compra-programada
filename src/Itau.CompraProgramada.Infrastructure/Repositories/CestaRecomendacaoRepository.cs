@@ -1,3 +1,5 @@
+using System.Threading;
+using System.Threading.Tasks;
 using Itau.CompraProgramada.Domain.Entities;
 using Itau.CompraProgramada.Domain.Interfaces;
 using Itau.CompraProgramada.Infrastructure.Data;
@@ -14,24 +16,24 @@ public class CestaRecomendacaoRepository : ICestaRecomendacaoRepository
         _context = context;
     }
 
-    public async Task<CestaRecomendacao?> ObterAtivaAsync()
+    public async Task<CestaRecomendacao?> ObterAtivaAsync(CancellationToken cancellationToken = default)
     {
         return await _context.CestasRecomendacao
             .Include(c => c.Itens)
-            .FirstOrDefaultAsync(c => c.Ativa);
+            .FirstOrDefaultAsync(c => c.Ativa, cancellationToken);
     }
 
-    public async Task<IEnumerable<CestaRecomendacao>> ObterHistoricoAsync()
+    public async Task<IEnumerable<CestaRecomendacao>> ObterHistoricoAsync(CancellationToken cancellationToken = default)
     {
         return await _context.CestasRecomendacao
             .Include(c => c.Itens)
             .OrderByDescending(c => c.DataCriacao)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
     }
 
-    public async Task AdicionarAsync(CestaRecomendacao cesta)
+    public async Task AdicionarAsync(CestaRecomendacao cesta, CancellationToken cancellationToken = default)
     {
-        await _context.CestasRecomendacao.AddAsync(cesta);
+        await _context.CestasRecomendacao.AddAsync(cesta, cancellationToken);
     }
 
     public void Atualizar(CestaRecomendacao cesta)

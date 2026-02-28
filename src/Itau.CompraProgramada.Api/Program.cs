@@ -5,7 +5,9 @@ using Itau.CompraProgramada.Infrastructure.B3;
 using Itau.CompraProgramada.Infrastructure.Data;
 using Itau.CompraProgramada.Infrastructure.Mensageria;
 using Itau.CompraProgramada.Infrastructure.Repositories;
+using Itau.CompraProgramada.Infrastructure.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -62,6 +64,12 @@ builder.Services.AddScoped<IRebalanceamentoPorMudancaCestaUseCase, Rebalanceamen
 builder.Services.AddScoped<IRebalanceamentoPorDesvioUseCase, RebalanceamentoPorDesvioUseCase>();
 builder.Services.AddScoped<IRentabilidadeUseCase, RentabilidadeUseCase>();
 
+// 4. Configurar Health Checks (RN: Fase 11)
+string kafkaBrokers = builder.Configuration["Kafka:BootstrapServers"] ?? "localhost:9092";
+builder.Services.AddHealthChecks()
+    .AddMySql(connectionString!, name: "MySQL")
+    .AddKafka(setup => { setup.BootstrapServers = kafkaBrokers; }, name: "Kafka");
+
 var app = builder.Build();
 
 // 4. Configurar o Pipeline HTTP
@@ -74,6 +82,25 @@ if (app.Environment.IsDevelopment())
 app.UseAuthorization();
 app.UseCors("CorsSeguro");
 app.MapControllers();
+
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var result = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                description = e.Value.Description
+            })
+        });
+        await context.Response.WriteAsync(result);
+    }
+});
 
 // --- BLOCO DE POPULAR DADOS DE TESTE ---
 using (var scope = app.Services.CreateScope())
