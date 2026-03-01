@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Itau.CompraProgramada.Application.DTOs;
 
 public record AdesaoResponse(
@@ -12,7 +14,7 @@ public record AdesaoResponse(
 );
 
 public record ContaGraficaDto(
-    long ContaId,
+    [property: JsonPropertyName("id")] long ContaId,
     string NumeroConta,
     string Tipo
 );

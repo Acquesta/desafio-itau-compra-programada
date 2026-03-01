@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Itau.CompraProgramada.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/motor")]
 public class ComprasController : ControllerBase
 {
     private readonly IMotorCompraProgramadaUseCase _motorCompra;
@@ -20,7 +20,7 @@ public class ComprasController : ControllerBase
     /// Executa o Motor de Compra Programada para todos os clientes ativos.
     /// </summary>
     /// <param name="dataReferencia">Data de referência para a execução da compra (por padrão hoje)</param>
-    [HttpPost("executar")]
+    [HttpPost("executar-compra")]
     public async Task<IActionResult> ExecutarCompraProgramada([FromQuery] DateTime? dataReferencia)
     {
         try
