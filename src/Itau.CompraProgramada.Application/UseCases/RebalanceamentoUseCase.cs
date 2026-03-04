@@ -29,7 +29,7 @@ public class RebalanceamentoUseCase : IRebalanceamentoUseCase
 
     public async Task<string> ExecutarVendaRebalanceamentoAsync(long clienteId, string ticker, int quantidade, decimal precoVendaAtual)
     {
-        var cliente = await _clienteRepository.ObterPorIdAsync(clienteId);
+        var cliente = await _clienteRepository.ObterPorIdComCustodiaAsync(clienteId);
         if (cliente == null) throw new InvalidOperationException("Cliente não encontrado.");
 
         var custodia = cliente.ContaGrafica.Custodias.FirstOrDefault(c => c.Ticker == ticker);

@@ -17,9 +17,7 @@ public class CotacaoB3Provider : ICotacaoB3Provider
 
     public IEnumerable<CotacaoDto> ObterCotacoesDeFechamento()
     {
-        var diretorio = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "cotacoes");
-        if (!Directory.Exists(diretorio))
-            throw new DirectoryNotFoundException($"O diretório de cotações não foi encontrado: {diretorio}");
+        var diretorio = Directory.GetCurrentDirectory();
 
         var arquivoMaisRecente = Directory.GetFiles(diretorio, "COTAHIST*.TXT")
                                           .OrderByDescending(f => f)

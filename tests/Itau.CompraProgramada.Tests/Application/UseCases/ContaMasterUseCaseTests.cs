@@ -10,12 +10,16 @@ namespace Itau.CompraProgramada.Tests.Application.UseCases;
 public class ContaMasterUseCaseTests
 {
     private readonly IClienteRepository _clienteRepositoryMock;
+    private readonly ICotacaoB3Provider _cotacaoProviderMock;
+    private readonly IUnitOfWork _unitOfWorkMock;
     private readonly ContaMasterUseCase _sut;
 
     public ContaMasterUseCaseTests()
     {
         _clienteRepositoryMock = Substitute.For<IClienteRepository>();
-        _sut = new ContaMasterUseCase(_clienteRepositoryMock);
+        _cotacaoProviderMock = Substitute.For<ICotacaoB3Provider>();
+        _unitOfWorkMock = Substitute.For<IUnitOfWork>();
+        _sut = new ContaMasterUseCase(_clienteRepositoryMock, _cotacaoProviderMock, _unitOfWorkMock);
     }
 
     [Fact]
@@ -44,6 +48,11 @@ public class ContaMasterUseCaseTests
         contaGrafica.AdicionarCustodia(new Custodia(contaGrafica.Id, "VALE3", 2, 50m));
 
         _clienteRepositoryMock.ObterClienteMasterAsync().Returns(master);
+        _cotacaoProviderMock.ObterCotacoesDeFechamento().Returns(new List<CotacaoDto>
+        {
+            new() { Ticker = "PETR4", PrecoFechamento = 20m },
+            new() { Ticker = "VALE3", PrecoFechamento = 50m }
+        });
 
         // Act
         var result = await _sut.ObterCustodiaMasterAsync();

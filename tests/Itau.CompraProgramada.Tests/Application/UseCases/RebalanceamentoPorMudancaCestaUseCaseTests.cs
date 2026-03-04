@@ -6,7 +6,6 @@ using FluentAssertions;
 using Itau.CompraProgramada.Application.UseCases;
 using Itau.CompraProgramada.Domain.Entities;
 using Itau.CompraProgramada.Domain.Enums;
-using Itau.CompraProgramada.Domain.Enums;
 using Itau.CompraProgramada.Domain.Interfaces;
 using Itau.CompraProgramada.Domain.Services;
 using NSubstitute;

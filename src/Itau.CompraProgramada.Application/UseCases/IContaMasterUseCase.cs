@@ -6,4 +6,5 @@ namespace Itau.CompraProgramada.Application.UseCases;
 public interface IContaMasterUseCase
 {
     Task<CarteiraResponse> ObterCustodiaMasterAsync();
+    Task InjetarMasterAsync();
 }

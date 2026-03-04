@@ -34,6 +34,10 @@ public class ClientesController : ControllerBase
         {
             return Conflict(new ErrorResponse("O CPF informado já está registrado em outro cliente ativo.", ex.Message));
         }
+        catch (InvalidOperationException ex) when (ex.Message == "CLIENTE_EMAIL_DUPLICADO")
+        {
+            return Conflict(new ErrorResponse("O E-mail informado já está registrado em outro cliente.", ex.Message));
+        }
         catch (ArgumentException ex)
         {
             return BadRequest(new ErrorResponse(ex.Message, "DADOS_INVALIDOS"));

@@ -18,7 +18,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("CorsSeguro", policy =>
     {
         var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() 
-            ?? new[] { "http://localhost:5173" };
+            ?? new[] { "http://localhost:5173", "http://localhost:5200", "http://localhost:5174" };
         policy.WithOrigins(corsOrigins) 
               .AllowAnyMethod()
               .AllowAnyHeader();
@@ -31,9 +31,12 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // 2. Configurar a Base de Dados (MySQL)
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Server=localhost;Database=dummy;";
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+}
 
 // 3. Registar as Injeções de Dependência (A magia da Clean Architecture!)
 // Repositórios
@@ -67,9 +70,16 @@ builder.Services.AddScoped<IRentabilidadeUseCase, RentabilidadeUseCase>();
 
 // 4. Configurar Health Checks (RN: Fase 11)
 string kafkaBrokers = builder.Configuration["Kafka:BootstrapServers"] ?? "localhost:9092";
-builder.Services.AddHealthChecks()
-    .AddMySql(connectionString!, name: "MySQL")
-    .AddKafka(setup => { setup.BootstrapServers = kafkaBrokers; }, name: "Kafka");
+var healthCheckConn = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Server=localhost;Database=dummy;";
+
+var healthChecksBuilder = builder.Services.AddHealthChecks();
+
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    healthChecksBuilder
+        .AddMySql(healthCheckConn, name: "MySQL", timeout: TimeSpan.FromSeconds(1))
+        .AddKafka(setup => { setup.BootstrapServers = kafkaBrokers; }, name: "Kafka", timeout: TimeSpan.FromSeconds(1));
+}
 
 var app = builder.Build();
 
@@ -84,24 +94,27 @@ app.UseAuthorization();
 app.UseCors("CorsSeguro");
 app.MapControllers();
 
-app.MapHealthChecks("/health", new HealthCheckOptions
+if (!app.Environment.IsEnvironment("Testing"))
 {
-    ResponseWriter = async (context, report) =>
+    app.MapHealthChecks("/health", new HealthCheckOptions
     {
-        context.Response.ContentType = "application/json";
-        var result = System.Text.Json.JsonSerializer.Serialize(new
+        ResponseWriter = async (context, report) =>
         {
-            status = report.Status.ToString(),
-            checks = report.Entries.Select(e => new
+            context.Response.ContentType = "application/json";
+            var result = System.Text.Json.JsonSerializer.Serialize(new
             {
-                name = e.Key,
-                status = e.Value.Status.ToString(),
-                description = e.Value.Description
-            })
-        });
-        await context.Response.WriteAsync(result);
-    }
-});
+                status = report.Status.ToString(),
+                checks = report.Entries.Select(e => new
+                {
+                    name = e.Key,
+                    status = e.Value.Status.ToString(),
+                    description = e.Value.Description
+                })
+            });
+            await context.Response.WriteAsync(result);
+        }
+    });
+}
 
 // --- BLOCO DE POPULAR DADOS DE TESTE ---
 using (var scope = app.Services.CreateScope())
@@ -109,12 +122,21 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<Itau.CompraProgramada.Infrastructure.Data.AppDbContext>();
     
     // ESTA É A LINHA MÁGICA: Ela cria o banco e as tabelas automaticamente se não existirem!
-    db.Database.Migrate();
+    if (db.Database.IsRelational())
+    {
+        db.Database.Migrate();
+    }
+    else
+    {
+        db.Database.EnsureCreated();
+    }
 
     // Se não tiver nenhuma cesta, a gente cria os dados
     if (!db.CestasRecomendacao.Any())
     {
-        // 1. Cria a Cesta Top Five
+        try 
+        {
+            // 1. Cria a Cesta Top Five
         var cesta = new Itau.CompraProgramada.Domain.Entities.CestaRecomendacao("Top Five", new List<Itau.CompraProgramada.Domain.Entities.ItemCesta>
         {
             new("PETR4", 20m), new("VALE3", 20m), new("ITUB4", 20m),
@@ -136,8 +158,15 @@ using (var scope = app.Services.CreateScope())
         db.ContasGraficas.Add(contaMaster);
 
         db.SaveChanges();
+        }
+        catch(Exception)
+        {
+            // Ignorar em caso de concorrência no teste em memória
+        }
     }
 }
 // ----------------------------------------
 
 app.Run();
+
+public partial class Program { }

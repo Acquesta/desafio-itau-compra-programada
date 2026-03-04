@@ -25,12 +25,12 @@ public class RentabilidadeUseCase : IRentabilidadeUseCase
 
     public async Task<RentabilidadeResponse> ObterRentabilidadeAsync(long clienteId)
     {
-        var cliente = await _clienteRepository.ObterPorIdAsync(clienteId);
+        var cliente = await _clienteRepository.ObterPorIdComCustodiaAsync(clienteId);
         if (cliente == null)
             throw new KeyNotFoundException($"Cliente {clienteId} não encontrado.");
 
         if (cliente.ContaGrafica == null || !cliente.ContaGrafica.Custodias.Any())
-            throw new InvalidOperationException("Cliente não possui custódia.");
+            return new RentabilidadeResponse(cliente.Id, cliente.Nome, 0, 0, 0, 0, new List<RentabilidadeAtivoResponse>());
 
         var cotacoes = _cotacaoProvider.ObterCotacoesDeFechamento()
             .ToDictionary(c => c.Ticker, c => c.PrecoFechamento);

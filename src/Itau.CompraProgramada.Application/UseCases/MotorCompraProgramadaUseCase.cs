@@ -176,7 +176,18 @@ public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
                 // Como não vendemos, simulamos uma "reatribuição" limpando e recadastrando pra ficar limpo
                 // Custo médio não é obrigatório no master, vamos apenas fixar a quantidade
                 var campoQtd = typeof(Custodia).GetProperty("Quantidade");
+                var campoPM = typeof(Custodia).GetProperty("PrecoMedio");
                 campoQtd!.SetValue(custodiaMasterAtivo, resultadoRateio.ResiduoMaster);
+                
+                // Mestre tbm deve atualizar precoMedio para o front exibir corretamente 
+                if (resultadoRateio.ResiduoMaster > 0 && (decimal)campoPM!.GetValue(custodiaMasterAtivo)! == 0m)
+                    campoPM.SetValue(custodiaMasterAtivo, precoCotacao);
+                else if (resultadoRateio.ResiduoMaster > 0)
+                {
+                    // Media simples para fins ilustrativos
+                    var pmAnterior = (decimal)campoPM.GetValue(custodiaMasterAtivo)!;
+                    campoPM.SetValue(custodiaMasterAtivo, (pmAnterior + precoCotacao) / 2m);
+                }
                 
                 _clienteRepository.Atualizar(master);
             }

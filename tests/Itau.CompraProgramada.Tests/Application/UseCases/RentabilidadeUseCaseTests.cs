@@ -55,7 +55,7 @@ public class RentabilidadeUseCaseTests
         typeof(ContaGrafica).GetField("_custodias", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .SetValue(conta, custodias);
 
-        _clienteRepositoryMock.ObterPorIdAsync(cliente.Id).Returns(cliente);
+        _clienteRepositoryMock.ObterPorIdComCustodiaAsync(cliente.Id).Returns(cliente);
         _cotacaoProviderMock.ObterCotacoesDeFechamento().Returns(new List<CotacaoDto>
         {
             new() { Ticker = "PETR4", PrecoFechamento = 37.00m },
@@ -111,7 +111,7 @@ public class RentabilidadeUseCaseTests
         typeof(ContaGrafica).GetField("_custodias", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .SetValue(conta, custodias);
 
-        _clienteRepositoryMock.ObterPorIdAsync(cliente.Id).Returns(cliente);
+        _clienteRepositoryMock.ObterPorIdComCustodiaAsync(cliente.Id).Returns(cliente);
         _cotacaoProviderMock.ObterCotacoesDeFechamento().Returns(new List<CotacaoDto>
         {
             new() { Ticker = "PETR4", PrecoFechamento = 30.00m }

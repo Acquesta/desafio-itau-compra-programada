@@ -24,6 +24,10 @@ public class ClienteUseCase : IClienteUseCase
         // RN-002: CPF único
         if (await _clienteRepository.ExisteCpfAsync(request.Cpf))
             throw new InvalidOperationException("CLIENTE_CPF_DUPLICADO");
+            
+        // Validação de Email Único
+        if (await _clienteRepository.ExisteEmailAsync(request.Email))
+            throw new InvalidOperationException("CLIENTE_EMAIL_DUPLICADO");
 
         // RN-001 + RN-003: Criação do cliente (validações no construtor da entidade)
         var cliente = new Cliente(request.Nome, request.Cpf, request.Email, request.ValorMensal);

@@ -13,6 +13,7 @@ public interface IClienteRepository
     Task<Cliente?> ObterClienteMasterAsync(CancellationToken cancellationToken = default);
 
     Task<bool> ExisteCpfAsync(string cpf, CancellationToken cancellationToken = default);
+    Task<bool> ExisteEmailAsync(string email, CancellationToken cancellationToken = default);
     Task AdicionarAsync(Cliente cliente, CancellationToken cancellationToken = default);
     void Atualizar(Cliente cliente);
 }

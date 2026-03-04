@@ -59,6 +59,11 @@ public class ClienteRepository : IClienteRepository
         return await _context.Clientes.AnyAsync(c => c.Cpf == cpf, cancellationToken);
     }
 
+    public async Task<bool> ExisteEmailAsync(string email, CancellationToken cancellationToken = default)
+    {
+        return await _context.Clientes.AnyAsync(c => c.Email == email, cancellationToken);
+    }
+
     public async Task AdicionarAsync(Cliente cliente, CancellationToken cancellationToken = default)
     {
         await _context.Clientes.AddAsync(cliente, cancellationToken);

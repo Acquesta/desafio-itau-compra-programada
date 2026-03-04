@@ -33,4 +33,21 @@ public class AdminContaMasterController : ControllerBase
             return NotFound(new ErrorResponse("Master não encontrada", ex.Message));
         }
     }
+
+    /// <summary>
+    /// Força a criação da Conta Master caso o banco esteja vazio. Função auxiliar de QA.
+    /// </summary>
+    [HttpPost("injetar-mock")]
+    public async Task<IActionResult> InjetarMasterMock()
+    {
+        try
+        {
+            await _contaMasterUseCase.InjetarMasterAsync();
+            return Ok(new { Mensagem = "Conta Master injetada/verificada com sucesso." });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { Erro = ex.Message });
+        }
+    }
 }
