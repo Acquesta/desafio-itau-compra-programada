@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Itau.CompraProgramada.Application.DTOs;
 using Itau.CompraProgramada.Domain.Entities;
 using Itau.CompraProgramada.Domain.Enums;
 using Itau.CompraProgramada.Domain.Interfaces;
@@ -11,46 +13,63 @@ namespace Itau.CompraProgramada.Application.UseCases;
 public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
 {
     private readonly IClienteRepository _clienteRepository;
-    private readonly ICestaRepository _cestaRepository;
+    private readonly ICestaRecomendacaoRepository _cestaRepository;
     private readonly ICotacaoB3Provider _cotacaoProvider;
+    private readonly IOrdemCompraRepository _ordemCompraRepository;
     private readonly IEventoIRPublisher _eventoIRPublisher;
     private readonly IUnitOfWork _unitOfWork;
     
-    // Serviços de Domínio puros (sem estado)
+    // Serviços de Domínio injetados via DI
     private readonly CalculadoraLoteFracionarioService _calculadoraLote;
     private readonly DistribuicaoProporcionalService _distribuicaoService;
+    private readonly DataCompraService _dataCompraService;
 
     public MotorCompraProgramadaUseCase(
         IClienteRepository clienteRepository,
-        ICestaRepository cestaRepository,
+        ICestaRecomendacaoRepository cestaRepository,
         ICotacaoB3Provider cotacaoProvider,
+        IOrdemCompraRepository ordemCompraRepository,
         IEventoIRPublisher eventoIRPublisher,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        CalculadoraLoteFracionarioService calculadoraLote,
+        DistribuicaoProporcionalService distribuicaoService,
+        DataCompraService dataCompraService)
     {
         _clienteRepository = clienteRepository;
         _cestaRepository = cestaRepository;
         _cotacaoProvider = cotacaoProvider;
+        _ordemCompraRepository = ordemCompraRepository;
         _eventoIRPublisher = eventoIRPublisher;
         _unitOfWork = unitOfWork;
-        
-        _calculadoraLote = new CalculadoraLoteFracionarioService();
-        _distribuicaoService = new DistribuicaoProporcionalService();
+        _calculadoraLote = calculadoraLote;
+        _distribuicaoService = distribuicaoService;
+        _dataCompraService = dataCompraService;
     }
-
-    public async Task<string> ExecutarComprasAsync(string caminhoArquivoCotacao)
+    public async Task<MotorCompraResponse> ExecutarComprasAsync(DateTime dataReferencia)
     {
+        // RN-020 a RN-022: Validação da data de compra (apenas dias úteis 5, 15, 25)
+        if (!_dataCompraService.EhDiaDeCompraValido(dataReferencia))
+        {
+            throw new InvalidOperationException($"A data {dataReferencia:dd/MM/yyyy} não é um dia válido para execução da compra programada.");
+        }
+
         // 1. Obter a Cesta Ativa
-        var cesta = await _cestaRepository.ObterCestaAtivaAsync();
+        var cesta = await _cestaRepository.ObterAtivaAsync();
         if (cesta == null)
             throw new InvalidOperationException("Nenhuma cesta de recomendação ativa encontrada.");
 
-        // 2. Obter Clientes Ativos (com a respetiva custódia)
+        // 2. Obter Clientes Ativos
         var clientes = (await _clienteRepository.ObterClientesAtivosComCustodiaAsync()).ToList();
         if (!clientes.Any())
-            return "Nenhum cliente ativo para processar.";
+            return new MotorCompraResponse(0, 0, new List<OrdemExecutadaDto>());
+
+        // 2.1 Obter Conta Master (RN-029, RN-030)
+        var master = await _clienteRepository.ObterClienteMasterAsync();
+        if (master == null)
+            throw new InvalidOperationException("Conta Master não encontrada. Impossível prosseguir sem a custódia central.");
 
         // 3. Ler Cotações do ficheiro da B3 e colocar num Dicionário em memória
-        var cotacoes = _cotacaoProvider.ObterCotacoesDeFechamento(caminhoArquivoCotacao)
+        var cotacoes = _cotacaoProvider.ObterCotacoesDeFechamento()
             .ToDictionary(c => c.Ticker, c => c.PrecoFechamento);
 
         // Validar se o ficheiro tem a cotação de todos os ativos da cesta
@@ -61,10 +80,12 @@ public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
         }
 
         // 4. Calcular o montante financeiro total a investir
-        var aportesClientes = clientes.ToDictionary(c => c.Id, c => c.ValorMensal);
+        // RN-023: Usar apenas 1/3 do valor mensal configurado (arredondado para 2 casas)
+        var aportesClientes = clientes.ToDictionary(c => c.Id, c => Math.Round(c.ValorMensal / 3m, 2));
         decimal totalAportes = aportesClientes.Values.Sum();
 
         int eventosPublicados = 0;
+        var ordensAgrupadasResponse = new List<OrdemExecutadaDto>();
 
         // 5. Processar cada ativo da cesta individualmente
         foreach (var item in cesta.Itens)
@@ -76,16 +97,32 @@ public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
             decimal valorAlocado = totalAportes * (item.Percentual / 100m);
             
             // Quantidade total a comprar no mercado (truncada)
-            int qtdTotalComprar = (int)Math.Truncate(valorAlocado / precoCotacao);
+            int qtdMercadoComprar = (int)Math.Truncate(valorAlocado / precoCotacao);
 
-            if (qtdTotalComprar <= 0) continue;
+            // RN-037: Usar saldo da conta master da compra anterior e somar à quantidade disponível para rateio
+            var custodiaMasterAtivo = master.ContaGrafica.Custodias.FirstOrDefault(c => c.Ticker == ticker);
+            int qtdDisponivelMaster = custodiaMasterAtivo?.Quantidade ?? 0;
+            
+            int qtdTotalDisponivelDistribuicao = qtdMercadoComprar + qtdDisponivelMaster;
+
+            if (qtdTotalDisponivelDistribuicao <= 0) continue;
 
             // 6. Calcular a divisão em Lote Padrão e Mercado Fracionário (Apenas informativo para o log/ordem)
-            var divisoesMercado = _calculadoraLote.Calcular(ticker, qtdTotalComprar);
+            var divisoesMercado = _calculadoraLote.Calcular(ticker, qtdTotalDisponivelDistribuicao);
+            
+            // RN-031 a RN-033: Persistir as divisões do tipo de mercado na Conta Master (Lote vs Fracionário)
+            var ordensParaSalvar = new List<OrdemCompra>();
+            
+            if (divisoesMercado.QtdLote > 0)
+                ordensParaSalvar.Add(new OrdemCompra(master.Id, ticker, divisoesMercado.QtdLote, precoCotacao, TipoMercado.Lote));
+                
+            if (divisoesMercado.QtdFracionaria > 0)
+                ordensParaSalvar.Add(new OrdemCompra(master.Id, ticker, divisoesMercado.QtdFracionaria, precoCotacao, TipoMercado.Fracionario));
 
             // 7. Rateio Proporcional entre os Clientes
-            // O serviço de domínio trata a matemática complexa da distribuição!
-            var resultadoRateio = _distribuicaoService.Distribuir(qtdTotalComprar, aportesClientes);
+            // O serviço de domínio trata a matemática complexa da distribuição e retorna o que sobra!
+            var resultadoRateio = _distribuicaoService.Distribuir(qtdTotalDisponivelDistribuicao, aportesClientes);
+
 
             foreach (var distribuicao in resultadoRateio.Distribuicoes)
             {
@@ -116,12 +153,58 @@ public class MotorCompraProgramadaUseCase : IMotorCompraProgramadaUseCase
                 
                 // Informar ao repositório que este cliente sofreu alterações
                 _clienteRepository.Atualizar(cliente);
+                
+                // Associar todas as distribuições às Ordens de Compra criadas neste loop (RN-032)
+                foreach(var ordem in ordensParaSalvar)
+                    ordem.AdicionarDistribuicao(new Distribuicao(ordem.Id, cliente.Id, ticker, distribuicao.Quantidade, precoCotacao));
+            }
+            
+            // Salvar Ordens de Compra geradas no banco
+            await _ordemCompraRepository.SalvarVariosAsync(ordensParaSalvar);
+
+            // RN-039 / RN-040: O que sobrou na divisão fracionária fica para a Conta Master
+            if (resultadoRateio.ResiduoMaster > 0 || qtdDisponivelMaster > 0)
+            {
+                if (custodiaMasterAtivo == null)
+                {
+                    custodiaMasterAtivo = new Custodia(master.ContaGrafica.Id, ticker, 0, 0);
+                    master.ContaGrafica.AdicionarCustodia(custodiaMasterAtivo);
+                }
+                
+                // Sobrescreve com o resíduo correto desta operação (se sobrou menos que o saldo anterior, o saldo ajusta)
+                // Usamos AtualizarSaldo (ou hack com reflection/adição neutra no Preço Médio)
+                // Como não vendemos, simulamos uma "reatribuição" limpando e recadastrando pra ficar limpo
+                // Custo médio não é obrigatório no master, vamos apenas fixar a quantidade
+                var campoQtd = typeof(Custodia).GetProperty("Quantidade");
+                var campoPM = typeof(Custodia).GetProperty("PrecoMedio");
+                campoQtd!.SetValue(custodiaMasterAtivo, resultadoRateio.ResiduoMaster);
+                
+                // Mestre tbm deve atualizar precoMedio para o front exibir corretamente 
+                if (resultadoRateio.ResiduoMaster > 0 && (decimal)campoPM!.GetValue(custodiaMasterAtivo)! == 0m)
+                    campoPM.SetValue(custodiaMasterAtivo, precoCotacao);
+                else if (resultadoRateio.ResiduoMaster > 0)
+                {
+                    // Media simples para fins ilustrativos
+                    var pmAnterior = (decimal)campoPM.GetValue(custodiaMasterAtivo)!;
+                    campoPM.SetValue(custodiaMasterAtivo, (pmAnterior + precoCotacao) / 2m);
+                }
+                
+                _clienteRepository.Atualizar(master);
+            }
+            
+            if (divisoesMercado.QtdLote > 0 || divisoesMercado.QtdFracionaria > 0)
+            {
+                ordensAgrupadasResponse.Add(new OrdemExecutadaDto(
+                    ticker, 
+                    divisoesMercado.QtdLote, 
+                    divisoesMercado.QtdFracionaria, 
+                    precoCotacao));
             }
         }
 
         // 9. Guardar tudo na base de dados numa transação única!
         await _unitOfWork.CommitAsync();
 
-        return $"Compra executada com sucesso para {clientes.Count} clientes. {eventosPublicados} eventos de retenção na fonte publicados.";
+        return new MotorCompraResponse(clientes.Count, eventosPublicados, ordensAgrupadasResponse);
     }
 }

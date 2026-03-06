@@ -66,6 +66,9 @@ namespace Itau.CompraProgramada.Infrastructure.Migrations
                     b.Property<DateTime>("DataAdesao")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<DateTime?>("DataSaida")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasColumnType("longtext");
@@ -168,8 +171,8 @@ namespace Itau.CompraProgramada.Infrastructure.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<decimal>("PrecoUnitario")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
+                        .HasPrecision(18, 5)
+                        .HasColumnType("decimal(18,5)");
 
                     b.Property<int>("Quantidade")
                         .HasColumnType("int");
@@ -179,6 +182,10 @@ namespace Itau.CompraProgramada.Infrastructure.Migrations
                         .HasColumnType("longtext");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CustodiaFilhoteId");
+
+                    b.HasIndex("OrdemCompraId");
 
                     b.ToTable("Distribuicoes");
                 });
@@ -194,11 +201,25 @@ namespace Itau.CompraProgramada.Infrastructure.Migrations
                     b.Property<long>("ClienteId")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("Cpf")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
                     b.Property<DateTime>("DataEvento")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<decimal>("PrecoUnitario")
+                        .HasColumnType("decimal(65,30)");
+
                     b.Property<bool>("PublicadoKafka")
                         .HasColumnType("tinyint(1)");
+
+                    b.Property<int>("Quantidade")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Ticker")
+                        .IsRequired()
+                        .HasColumnType("longtext");
 
                     b.Property<int>("Tipo")
                         .HasColumnType("int");
@@ -214,6 +235,33 @@ namespace Itau.CompraProgramada.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("EventosIR");
+                });
+
+            modelBuilder.Entity("Itau.CompraProgramada.Domain.Entities.HistoricoValorMensal", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("ClienteId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("DataAlteracao")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<decimal>("ValorAnterior")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<decimal>("ValorNovo")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClienteId");
+
+                    b.ToTable("HistoricoValoresMensais");
                 });
 
             modelBuilder.Entity("Itau.CompraProgramada.Domain.Entities.ItemCesta", b =>
@@ -260,8 +308,8 @@ namespace Itau.CompraProgramada.Infrastructure.Migrations
                         .HasColumnType("datetime(6)");
 
                     b.Property<decimal>("PrecoUnitario")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
+                        .HasPrecision(18, 5)
+                        .HasColumnType("decimal(18,5)");
 
                     b.Property<int>("Quantidade")
                         .HasColumnType("int");
@@ -291,6 +339,17 @@ namespace Itau.CompraProgramada.Infrastructure.Migrations
 
                     b.Property<DateTime>("DataRebalanceamento")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<decimal>("LucroLiquido")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("PrecoMedio")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("Quantidade")
+                        .HasColumnType("int");
 
                     b.Property<string>("TickerComprado")
                         .IsRequired()
@@ -329,6 +388,32 @@ namespace Itau.CompraProgramada.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Itau.CompraProgramada.Domain.Entities.Distribuicao", b =>
+                {
+                    b.HasOne("Itau.CompraProgramada.Domain.Entities.Cliente", null)
+                        .WithMany()
+                        .HasForeignKey("CustodiaFilhoteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Itau.CompraProgramada.Domain.Entities.OrdemCompra", "OrdemCompra")
+                        .WithMany("Distribuicoes")
+                        .HasForeignKey("OrdemCompraId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("OrdemCompra");
+                });
+
+            modelBuilder.Entity("Itau.CompraProgramada.Domain.Entities.HistoricoValorMensal", b =>
+                {
+                    b.HasOne("Itau.CompraProgramada.Domain.Entities.Cliente", null)
+                        .WithMany("HistoricoValores")
+                        .HasForeignKey("ClienteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Itau.CompraProgramada.Domain.Entities.ItemCesta", b =>
                 {
                     b.HasOne("Itau.CompraProgramada.Domain.Entities.CestaRecomendacao", null)
@@ -345,11 +430,18 @@ namespace Itau.CompraProgramada.Infrastructure.Migrations
                 {
                     b.Navigation("ContaGrafica")
                         .IsRequired();
+
+                    b.Navigation("HistoricoValores");
                 });
 
             modelBuilder.Entity("Itau.CompraProgramada.Domain.Entities.ContaGrafica", b =>
                 {
                     b.Navigation("Custodias");
+                });
+
+            modelBuilder.Entity("Itau.CompraProgramada.Domain.Entities.OrdemCompra", b =>
+                {
+                    b.Navigation("Distribuicoes");
                 });
 #pragma warning restore 612, 618
         }

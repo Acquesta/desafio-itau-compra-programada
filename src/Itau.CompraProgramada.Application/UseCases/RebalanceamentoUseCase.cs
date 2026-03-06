@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Itau.CompraProgramada.Domain.Entities;
 using Itau.CompraProgramada.Domain.Enums;
 using Itau.CompraProgramada.Domain.Interfaces;
+using Itau.CompraProgramada.Domain.Services;
 
 namespace Itau.CompraProgramada.Application.UseCases;
 
@@ -11,21 +12,24 @@ public class RebalanceamentoUseCase : IRebalanceamentoUseCase
 {
     private readonly IClienteRepository _clienteRepository;
     private readonly IEventoIRPublisher _eventoIRPublisher;
+    private readonly CalculoIRService _calculoIRService;
     private readonly IUnitOfWork _unitOfWork;
 
     public RebalanceamentoUseCase(
         IClienteRepository clienteRepository,
         IEventoIRPublisher eventoIRPublisher,
+        CalculoIRService calculoIRService,
         IUnitOfWork unitOfWork)
     {
         _clienteRepository = clienteRepository;
         _eventoIRPublisher = eventoIRPublisher;
+        _calculoIRService = calculoIRService;
         _unitOfWork = unitOfWork;
     }
 
     public async Task<string> ExecutarVendaRebalanceamentoAsync(long clienteId, string ticker, int quantidade, decimal precoVendaAtual)
     {
-        var cliente = await _clienteRepository.ObterPorIdAsync(clienteId);
+        var cliente = await _clienteRepository.ObterPorIdComCustodiaAsync(clienteId);
         if (cliente == null) throw new InvalidOperationException("Cliente não encontrado.");
 
         var custodia = cliente.ContaGrafica.Custodias.FirstOrDefault(c => c.Ticker == ticker);
@@ -40,23 +44,23 @@ public class RebalanceamentoUseCase : IRebalanceamentoUseCase
 
         // 2. Atualizar a Custódia (Subtrair as ações vendidas)
         // O Preço Médio NÃO muda na venda, apenas a quantidade!
-        custodia.AtualizarQuantidadeVenda(quantidade);
+        custodia.RemoverVenda(quantidade);
 
         string mensagemRetorno = $"Venda de {quantidade} {ticker} executada. Valor total: R$ {valorTotalVenda:N2}.";
 
-        // 3. Regra de Negócio: Verificação da Isenção de R$ 20.000,00
-        // Em um cenário real, somaríamos todas as vendas do mês. Aqui avaliamos a operação.
-        if (valorTotalVenda > 20000m && lucro > 0)
+        // 3. RN-057 a RN-061: Verificação fiscal usando CalculoIRService
+        decimal valorIR = _calculoIRService.CalcularIRSobreVendas(valorTotalVenda, lucro);
+
+        if (valorIR > 0)
         {
-            // O cliente lucrou e passou do limite de isenção! Imposto de 20% sobre o LUCRO.
-            decimal valorImposto = Math.Round(lucro * 0.20m, 2);
-            
-            var eventoIR = new EventoIR(cliente.Id, TipoEventoIR.Venda20Percent, lucro, valorImposto);
+            var eventoIR = new EventoIR(
+                cliente.Id, cliente.Cpf, ticker, TipoEventoIR.Venda20Percent,
+                lucro, valorIR, quantidade, precoVendaAtual);
             await _eventoIRPublisher.PublicarEventoAsync(eventoIR);
 
-            mensagemRetorno += $" Venda ultrapassou limite de isenção. Evento de IR (20% sobre lucro) gerado no valor de R$ {valorImposto:N2}.";
+            mensagemRetorno += $" IR (20% sobre lucro) de R$ {valorIR:N2} publicado no Kafka.";
         }
-        else if (valorTotalVenda <= 20000m && lucro > 0)
+        else if (lucro > 0)
         {
             mensagemRetorno += " Venda isenta de IR (abaixo de R$ 20.000,00 no mês).";
         }

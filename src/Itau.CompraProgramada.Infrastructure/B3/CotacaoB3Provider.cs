@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System;
 using Itau.CompraProgramada.Domain.Interfaces;
 
 namespace Itau.CompraProgramada.Infrastructure.B3;
@@ -13,9 +15,18 @@ public class CotacaoB3Provider : ICotacaoB3Provider
         _parser = new CotahistParser();
     }
 
-    public IEnumerable<CotacaoDto> ObterCotacoesDeFechamento(string caminhoArquivo)
+    public IEnumerable<CotacaoDto> ObterCotacoesDeFechamento()
     {
-        var cotacoesBrutas = _parser.LerCotacoesDeFechamento(caminhoArquivo);
+        var diretorio = Directory.GetCurrentDirectory();
+
+        var arquivoMaisRecente = Directory.GetFiles(diretorio, "COTAHIST*.TXT")
+                                          .OrderByDescending(f => f)
+                                          .FirstOrDefault();
+                                          
+        if (arquivoMaisRecente == null)
+            throw new FileNotFoundException($"Nenhum arquivo de cotação COTAHIST*.TXT encontrado em {diretorio}");
+
+        var cotacoesBrutas = _parser.LerCotacoesDeFechamento(arquivoMaisRecente);
         
         // Mapeia do DTO da Infra para o DTO do Domínio (Mantendo o Lote Padrão)
         return cotacoesBrutas

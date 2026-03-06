@@ -1,4 +1,4 @@
-﻿namespace Itau.CompraProgramada.Tests;
+﻿namespace Itau.CompraProgramada.IntegrationTests;
 
 public class UnitTest1
 {

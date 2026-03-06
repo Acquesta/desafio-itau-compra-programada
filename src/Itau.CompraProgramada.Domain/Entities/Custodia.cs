@@ -38,11 +38,6 @@ public class Custodia
         DataUltimaAtualizacao = DateTime.UtcNow;
     }
 
-    public void AtualizarQuantidadeVenda(int quantidadeVendida)
-    {
-        Quantidade -= quantidadeVendida;
-    }
-
     // Regra RN-043 - Em caso de venda, o preço médio NÃO se altera
     public void RemoverVenda(int quantidadeVenda)
     {

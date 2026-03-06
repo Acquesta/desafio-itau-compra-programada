@@ -1,10 +1,13 @@
 using Itau.CompraProgramada.Application.UseCases;
 using Itau.CompraProgramada.Domain.Interfaces;
+using Itau.CompraProgramada.Domain.Services;
 using Itau.CompraProgramada.Infrastructure.B3;
 using Itau.CompraProgramada.Infrastructure.Data;
 using Itau.CompraProgramada.Infrastructure.Mensageria;
 using Itau.CompraProgramada.Infrastructure.Repositories;
+using Itau.CompraProgramada.Infrastructure.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,8 +17,9 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("CorsSeguro", policy =>
     {
-        // Trava o acesso apenas para a URL onde o React está rodando
-        policy.WithOrigins("http://localhost:5173") 
+        var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() 
+            ?? new[] { "http://localhost:5173", "http://localhost:5200", "http://localhost:5174" };
+        policy.WithOrigins(corsOrigins) 
               .AllowAnyMethod()
               .AllowAnyHeader();
     });
@@ -27,14 +31,19 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // 2. Configurar a Base de Dados (MySQL)
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Server=localhost;Database=dummy;";
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+}
 
 // 3. Registar as Injeções de Dependência (A magia da Clean Architecture!)
 // Repositórios
 builder.Services.AddScoped<IClienteRepository, ClienteRepository>();
-builder.Services.AddScoped<ICestaRepository, CestaRepository>();
+builder.Services.AddScoped<ICestaRecomendacaoRepository, CestaRecomendacaoRepository>();
+builder.Services.AddScoped<IOrdemCompraRepository, OrdemCompraRepository>();
+builder.Services.AddScoped<IRebalanceamentoRepository, RebalanceamentoRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 // Integrações Externas (Infra)
@@ -42,9 +51,35 @@ builder.Services.AddScoped<ICotacaoB3Provider, CotacaoB3Provider>();
 // O Publisher do Kafka é adicionado como Singleton por questões de performance do Producer
 builder.Services.AddSingleton<IEventoIRPublisher, EventoIRPublisher>(); 
 
+// Serviços de Domínio
+builder.Services.AddScoped<CalculadoraLoteFracionarioService>();
+builder.Services.AddScoped<DistribuicaoProporcionalService>();
+builder.Services.AddScoped<DataCompraService>();
+builder.Services.AddScoped<CalculoDesvioService>();
+builder.Services.AddScoped<CalculoIRService>();
+
 // Casos de Uso (Application)
+builder.Services.AddScoped<IClienteUseCase, ClienteUseCase>();
+builder.Services.AddScoped<ICestaUseCase, CestaUseCase>();
+builder.Services.AddScoped<IContaMasterUseCase, ContaMasterUseCase>();
 builder.Services.AddScoped<IMotorCompraProgramadaUseCase, MotorCompraProgramadaUseCase>();
 builder.Services.AddScoped<IRebalanceamentoUseCase, RebalanceamentoUseCase>();
+builder.Services.AddScoped<IRebalanceamentoPorMudancaCestaUseCase, RebalanceamentoPorMudancaCestaUseCase>();
+builder.Services.AddScoped<IRebalanceamentoPorDesvioUseCase, RebalanceamentoPorDesvioUseCase>();
+builder.Services.AddScoped<IRentabilidadeUseCase, RentabilidadeUseCase>();
+
+// 4. Configurar Health Checks (RN: Fase 11)
+string kafkaBrokers = builder.Configuration["Kafka:BootstrapServers"] ?? "localhost:9092";
+var healthCheckConn = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Server=localhost;Database=dummy;";
+
+var healthChecksBuilder = builder.Services.AddHealthChecks();
+
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    healthChecksBuilder
+        .AddMySql(healthCheckConn, name: "MySQL", timeout: TimeSpan.FromSeconds(1))
+        .AddKafka(setup => { setup.BootstrapServers = kafkaBrokers; }, name: "Kafka", timeout: TimeSpan.FromSeconds(1));
+}
 
 var app = builder.Build();
 
@@ -59,18 +94,49 @@ app.UseAuthorization();
 app.UseCors("CorsSeguro");
 app.MapControllers();
 
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    app.MapHealthChecks("/health", new HealthCheckOptions
+    {
+        ResponseWriter = async (context, report) =>
+        {
+            context.Response.ContentType = "application/json";
+            var result = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                status = report.Status.ToString(),
+                checks = report.Entries.Select(e => new
+                {
+                    name = e.Key,
+                    status = e.Value.Status.ToString(),
+                    description = e.Value.Description
+                })
+            });
+            await context.Response.WriteAsync(result);
+        }
+    });
+}
+
 // --- BLOCO DE POPULAR DADOS DE TESTE ---
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<Itau.CompraProgramada.Infrastructure.Data.AppDbContext>();
     
     // ESTA É A LINHA MÁGICA: Ela cria o banco e as tabelas automaticamente se não existirem!
-    db.Database.Migrate();
+    if (db.Database.IsRelational())
+    {
+        db.Database.Migrate();
+    }
+    else
+    {
+        db.Database.EnsureCreated();
+    }
 
     // Se não tiver nenhuma cesta, a gente cria os dados
     if (!db.CestasRecomendacao.Any())
     {
-        // 1. Cria a Cesta Top Five
+        try 
+        {
+            // 1. Cria a Cesta Top Five
         var cesta = new Itau.CompraProgramada.Domain.Entities.CestaRecomendacao("Top Five", new List<Itau.CompraProgramada.Domain.Entities.ItemCesta>
         {
             new("PETR4", 20m), new("VALE3", 20m), new("ITUB4", 20m),
@@ -92,8 +158,15 @@ using (var scope = app.Services.CreateScope())
         db.ContasGraficas.Add(contaMaster);
 
         db.SaveChanges();
+        }
+        catch(Exception)
+        {
+            // Ignorar em caso de concorrência no teste em memória
+        }
     }
 }
 // ----------------------------------------
 
 app.Run();
+
+public partial class Program { }

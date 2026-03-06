@@ -1,9 +1,11 @@
+using System;
 using System.Threading.Tasks;
+using Itau.CompraProgramada.Application.DTOs;
 
 namespace Itau.CompraProgramada.Application.UseCases;
 
 public interface IMotorCompraProgramadaUseCase
 {
-    // Retorna uma string com o resumo da operação (ex: "Compra executada para 5 clientes")
-    Task<string> ExecutarComprasAsync(string caminhoArquivoCotacao);
+    // Retorna detalhes das ordens executadas no mercado
+    Task<MotorCompraResponse> ExecutarComprasAsync(DateTime dataReferencia);
 }

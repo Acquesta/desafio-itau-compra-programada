@@ -17,6 +17,7 @@ public class AppDbContext : DbContext
     public DbSet<Distribuicao> Distribuicoes => Set<Distribuicao>();
     public DbSet<EventoIR> EventosIR => Set<EventoIR>();
     public DbSet<Rebalanceamento> Rebalanceamentos => Set<Rebalanceamento>();
+    public DbSet<HistoricoValorMensal> HistoricoValoresMensais => Set<HistoricoValorMensal>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -35,6 +36,12 @@ public class AppDbContext : DbContext
                   .WithOne()
                   .HasForeignKey<ContaGrafica>(c => c.ClienteId)
                   .OnDelete(DeleteBehavior.Restrict);
+
+            // Relacionamento 1:N entre Cliente e Histórico de Valores
+            entity.HasMany(e => e.HistoricoValores)
+                  .WithOne()
+                  .HasForeignKey(h => h.ClienteId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ContaGrafica>(entity =>
@@ -64,13 +71,25 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<OrdemCompra>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.PrecoUnitario).HasPrecision(18, 2);
+            entity.Property(e => e.PrecoUnitario).HasPrecision(18, 5);
+            
+            // OrdemCompra 1 -> N Distribuicao
+            entity.HasMany(e => e.Distribuicoes)
+                  .WithOne(d => d.OrdemCompra)
+                  .HasForeignKey(d => d.OrdemCompraId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Distribuicao>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.PrecoUnitario).HasPrecision(18, 2);
+            entity.Property(e => e.PrecoUnitario).HasPrecision(18, 5);
+            
+            // Distribuicao N -> 1 Cliente
+            entity.HasOne<Cliente>()
+                  .WithMany()
+                  .HasForeignKey(d => d.CustodiaFilhoteId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<EventoIR>(entity =>
@@ -84,6 +103,8 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ValorVenda).HasPrecision(18, 2);
+            entity.Property(e => e.PrecoMedio).HasPrecision(18, 4);
+            entity.Property(e => e.LucroLiquido).HasPrecision(18, 2);
         });
     }
 }

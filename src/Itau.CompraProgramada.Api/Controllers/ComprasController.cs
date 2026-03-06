@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Itau.CompraProgramada.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/motor")]
 public class ComprasController : ControllerBase
 {
     private readonly IMotorCompraProgramadaUseCase _motorCompra;
@@ -19,18 +19,16 @@ public class ComprasController : ControllerBase
     /// <summary>
     /// Executa o Motor de Compra Programada para todos os clientes ativos.
     /// </summary>
-    /// <param name="caminhoArquivo">O caminho local para o ficheiro COTAHIST_D*.TXT da B3</param>
-    [HttpPost("executar")]
-    public async Task<IActionResult> ExecutarCompraProgramada([FromQuery] string caminhoArquivo)
+    /// <param name="dataReferencia">Data de referência para a execução da compra (por padrão hoje)</param>
+    [HttpPost("executar-compra")]
+    public async Task<IActionResult> ExecutarCompraProgramada([FromQuery] DateTime? dataReferencia)
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(caminhoArquivo))
-                return BadRequest(new { Erro = "O caminho do ficheiro COTAHIST é obrigatório." });
-
-            var resultado = await _motorCompra.ExecutarComprasAsync(caminhoArquivo);
+            var data = dataReferencia ?? DateTime.Today;
+            var resultado = await _motorCompra.ExecutarComprasAsync(data);
             
-            return Ok(new { Mensagem = resultado });
+            return Ok(resultado);
         }
         catch (InvalidOperationException ex)
         {
@@ -64,14 +62,52 @@ public class ComprasController : ControllerBase
             return new string(linha);
         }
 
-        linhas.Add(CriarLinhaPosicional("PETR4", "3500")); // R$ 35,00
-        linhas.Add(CriarLinhaPosicional("VALE3", "6000")); // R$ 60,00
-        linhas.Add(CriarLinhaPosicional("ITUB4", "3000")); // R$ 30,00
-        linhas.Add(CriarLinhaPosicional("BBDC4", "1500")); // R$ 15,00
-        linhas.Add(CriarLinhaPosicional("WEGE3", "4000")); // R$ 40,00
+        // Base prices if file doesn't exist
+        var precosAtuais = new System.Collections.Generic.Dictionary<string, decimal>
+        {
+            { "PETR4", 35.00m },
+            { "VALE3", 60.00m },
+            { "ITUB4", 30.00m },
+            { "BBDC4", 15.00m },
+            { "WEGE3", 40.00m }
+        };
+
+        // Try to read last generated file to get the latest prices, allowing continuous trends
+        if (System.IO.File.Exists(caminho))
+        {
+            try
+            {
+                var linhasAtuais = System.IO.File.ReadAllLines(caminho);
+                foreach (var l in linhasAtuais)
+                {
+                    if (l.Length >= 121)
+                    {
+                        var ticker = l.Substring(12, 12).Trim();
+                        var precoStr = l.Substring(108, 13);
+                        if (decimal.TryParse(precoStr, out var precoCentavos))
+                        {
+                            precosAtuais[ticker] = precoCentavos / 100m;
+                        }
+                    }
+                }
+            }
+            catch { /* Ignora e usa a base se falhar leitura */ }
+        }
+
+        var rand = new Random();
+        foreach (var kvp in precosAtuais)
+        {
+            // Calculate a random variation between -5% to +5%
+            decimal variacaoPercentual = (decimal)(rand.NextDouble() * 0.10 - 0.05);
+            decimal novoPreco = Math.Round(kvp.Value * (1 + variacaoPercentual), 2);
+            
+            // Format price to 13-digit string (in cents)
+            string precoCentavosFormatado = ((int)(novoPreco * 100)).ToString();
+            linhas.Add(CriarLinhaPosicional(kvp.Key, precoCentavosFormatado));
+        }
 
         System.IO.File.WriteAllLines(caminho, linhas);
 
-        return Ok(new { Mensagem = "Arquivo da B3 gerado com sucesso para testes!", CaminhoArquivo = caminho });
+        return Ok(new { Mensagem = "Arquivo da B3 atualizado com FLUTUAÇÕES de até 5% nos preços!", CaminhoArquivo = caminho });
     }
 }

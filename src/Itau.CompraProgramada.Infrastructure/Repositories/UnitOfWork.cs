@@ -13,9 +13,9 @@ public class UnitOfWork : IUnitOfWork
         _context = context;
     }
 
-    public async Task<bool> CommitAsync()
+    public async Task<bool> CommitAsync(CancellationToken cancellationToken = default)
     {
         // Guarda todas as alterações pendentes no MySQL. Retorna true se algo foi guardado.
-        return await _context.SaveChangesAsync() > 0;
+        return await _context.SaveChangesAsync(cancellationToken) > 0;
     }
 }
